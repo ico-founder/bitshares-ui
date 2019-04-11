@@ -41,11 +41,26 @@ const withWorthLessSettlementFlag = WrappedComponent =>
                                 : Number(orderBook.bids[0].price)
                     );
 
-                const settlementPrice = asset.getIn([
-                    "bitasset",
-                    "current_feed",
-                    "settlement_price"
-                ]);
+                let settlementPrice = null;
+                let factor = 1;
+                let offset = 0;
+                if (
+                    !!asset.get("bitasset") &&
+                    asset.get("bitasset").get("settlement_fund") > 0
+                ) {
+                    settlementPrice = asset
+                        .get("bitasset")
+                        .get("settlement_price");
+                } else {
+                    settlementPrice = asset.getIn([
+                        "bitasset",
+                        "current_feed",
+                        "settlement_price"
+                    ]);
+                    offset = asset.get("bitasset").get("options").get("force_settlement_offset_percent");
+                    factor = 1 - offset / 10000;
+                }
+
                 const realSettlementPrice = new Price({
                     base: new Asset({
                         asset_id: shortBackingAssetId,
@@ -57,13 +72,16 @@ const withWorthLessSettlementFlag = WrappedComponent =>
                         amount: settlementPrice.getIn(["base", "amount"]),
                         precision: asset.get("precision")
                     })
-                }).toReal();
+                }).toReal() * factor;
+
 
                 // TODO: compare fractional price instead of real price
                 realMarketPricePromise.then(realMarketPrice =>
                     this.setState({
                         worthLessSettlement:
-                            realMarketPrice > realSettlementPrice
+                            realMarketPrice > realSettlementPrice,
+                        marketPrice: realMarketPrice,
+                        settlementPrice: realSettlementPrice
                     })
                 );
             }
@@ -76,12 +94,14 @@ const withWorthLessSettlementFlag = WrappedComponent =>
             render() {
                 const {
                     props,
-                    state: {worthLessSettlement}
+                    state: {worthLessSettlement, marketPrice, settlementPrice}
                 } = this;
                 return (
                     <WrappedComponent
                         {...props}
                         worthLessSettlement={worthLessSettlement}
+                        marketPrice={marketPrice}
+                        settlementPrice={settlementPrice}
                     />
                 );
             }
